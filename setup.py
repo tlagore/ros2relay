@@ -5,7 +5,10 @@ package_name = 'ros2relay'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=[
+        package_name,
+        'ros2relay.message_socket'
+    ],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -20,6 +23,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'net_publisher = ros2relay.network_publisher:main',
+            'net_subscriber = ros2relay.network_subscriber:main'
         ],
     },
 )

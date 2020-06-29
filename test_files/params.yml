@@ -1,0 +1,3 @@
+ros2relay_publisher:
+    ros__parameters:
+        topics: ['topic']
