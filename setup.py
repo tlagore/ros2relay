@@ -13,10 +13,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='tyrone',
-    maintainer_email='tyrone@todo.todo',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    maintainer='Tyrone Lagore',
+    maintainer_email='tyrone@gmail.com',
+    description='Simple relay that subscribes to ros topics and relays them to remote endpoints',
+    license='Apache 2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
