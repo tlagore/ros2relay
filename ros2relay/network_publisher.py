@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from importlib import import_module
 
-# from std_msgs.msg import String
+#from std_msgs.msg import String
 from ros2relay.message_socket.message_socket import MessageSocket
 
 class NetworkPublisher(Node):
@@ -12,10 +12,11 @@ class NetworkPublisher(Node):
     """
 
     topic_modules = {}
-    timers = {}
+    my_timer_topics = {}
+    my_subscriptions = {}
 
     def __init__(self):
-        super().__init__('ros2relay_publisher')
+        super().__init__('ros2relay_net_publisher')
         self.declare_parameter('topics')
         self.declare_parameter('topicTypes')
         topics = self.get_parameter('topics').get_parameter_value().string_array_value
@@ -23,25 +24,35 @@ class NetworkPublisher(Node):
 
         timer_period = 1.5  # seconds
 
+        print(topicTypes)
+        print(topics)
+
         for idx, tType in enumerate(topicTypes):
             module_parts = tType.split('.')
             module_name = module_parts[0] + '.' + module_parts[1]
             module = import_module(module_name)
             msg = getattr(module, module_parts[2])
             self.topic_modules[topics[idx]] = msg
-            self.publisher_ = self.create_publisher(msg, topics[idx], 10)
-            timer = self.create_timer(timer_period, self.timer_callback)
-            self.timers[timer] = topics[idx] 
 
-        self.i = 0
+            self.my_subscriptions[topics[idx]] = self.create_subscription(
+                msg,
+                topics[idx],
+                self.listener_callback,
+                10
+            )
+            self.get_logger().info(f'Initializing topic {topics[idx]} with type {msg}')
+            self.subscription = self.my_subscriptions[topics[idx]]
+            # self.subscription = self.create_subscription(
+            # String,
+            # 'topic',
+            # self.listener_callback,
+            # 10)
+            # self.subscription  # prevent unused variable warning
+        self.get_logger().info('waiting')
+        
 
-    def timer_callback(self):
-        # print(topicName)
-        msg = self.topic_modules['topic']()
-        msg.data = 'Hello World: %d' % self.i
-        self.publisher_.publish(msg)
-        self.get_logger().info('Publishing: "%s"' % msg.data)
-        self.i += 1
+    def listener_callback(self, msg):
+        self.get_logger().info(f'I heard: "{msg.data}"')
 
 
 def main(args=None):

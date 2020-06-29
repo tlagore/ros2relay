@@ -1,4 +1,4 @@
-ros2relay_publisher:
+ros2relay_net_publisher:
     ros__parameters:
-        topics: ['topic']
-        topicTypes: ['std_msgs.msg.String']
+        topics: ['topic', 'num_topic']
+        topicTypes: ['std_msgs.msg.String', 'std_msgs.msg.Int64']
