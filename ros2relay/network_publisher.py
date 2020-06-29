@@ -1,7 +1,8 @@
 import rclpy
 from rclpy.node import Node
+from importlib import import_module
 
-from std_msgs.msg import String
+# from std_msgs.msg import String
 from ros2relay.message_socket.message_socket import MessageSocket
 
 class NetworkPublisher(Node):
@@ -9,17 +10,34 @@ class NetworkPublisher(Node):
     
         Requires that a NetworkSubscriber be running on the target endpoint
     """
+
+    topic_modules = {}
+    timers = {}
+
     def __init__(self):
         super().__init__('ros2relay_publisher')
         self.declare_parameter('topics')
-        print(self.get_parameter('topics').get_parameter_value().string_array_value)
-        self.publisher_ = self.create_publisher(String, 'topic', 10)
-        timer_period = 0.5  # seconds
-        self.timer = self.create_timer(timer_period, self.timer_callback)
+        self.declare_parameter('topicTypes')
+        topics = self.get_parameter('topics').get_parameter_value().string_array_value
+        topicTypes = self.get_parameter('topicTypes').get_parameter_value().string_array_value
+
+        timer_period = 1.5  # seconds
+
+        for idx, tType in enumerate(topicTypes):
+            module_parts = tType.split('.')
+            module_name = module_parts[0] + '.' + module_parts[1]
+            module = import_module(module_name)
+            msg = getattr(module, module_parts[2])
+            self.topic_modules[topics[idx]] = msg
+            self.publisher_ = self.create_publisher(msg, topics[idx], 10)
+            timer = self.create_timer(timer_period, self.timer_callback)
+            self.timers[timer] = topics[idx] 
+
         self.i = 0
 
     def timer_callback(self):
-        msg = String()
+        # print(topicName)
+        msg = self.topic_modules['topic']()
         msg.data = 'Hello World: %d' % self.i
         self.publisher_.publish(msg)
         self.get_logger().info('Publishing: "%s"' % msg.data)

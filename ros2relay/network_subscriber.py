@@ -12,6 +12,11 @@ class NetworkSubscriber(Node):
     """
     def __init__(self):
         super().__init__('ros2relay_subscriber')
+        self.declare_parameter('topics')
+        self.declare_parameter('topicTypes')
+        print(self.get_parameter('topics').get_parameter_value().string_array_value)
+        print(self.get_parameter('topicTypes').get_parameter_value().string_array_value)
+        
         self.subscription = self.create_subscription(
             String,
             'topic',

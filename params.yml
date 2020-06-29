@@ -1,3 +1,4 @@
 ros2relay_publisher:
     ros__parameters:
         topics: ['topic']
+        topicTypes: ['std_msgs.msg.String']
