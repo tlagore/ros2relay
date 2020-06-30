@@ -20,6 +20,8 @@ class NetworkSubscriber(Node):
     """
     listener_threads = []
     topic_modules = {}
+
+    """ [topic] = publisher """
     my_publishers = {}
 
     def __init__(self):
@@ -86,7 +88,7 @@ class NetworkSubscriber(Node):
 
     def handle_message(self, msg):
         """ handles a message received by a client """
-        print("topic: {0} payload: {1}".format(msg.topic, msg.payload.data))
+        self.my_publishers[msg.topic].publish(msg.payload)
 
     def handle_client(self, args):
         """  """

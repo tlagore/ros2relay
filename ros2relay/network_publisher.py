@@ -109,7 +109,7 @@ class NetworkPublisher(Node):
         messageSent = False
 
         netMessage = SocketMessage(mType=MessageType.MESSAGE, mTopic=topic, mPayload=msg)
-        self.get_logger().info(f'I heard: "{msg.data}" on topic "{topic}"')
+        self.get_logger().info(f'I heard: "{msg}" on topic "{topic}"')
         try:
             self.send_message(netMessage)
             messageSent = True
