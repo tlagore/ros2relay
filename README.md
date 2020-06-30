@@ -78,12 +78,15 @@ The above will read in your params.yml file and look at your topicTypes variable
 
 
 **source setup**
+
 `. install\setup.bash`
 
 **run net_subscriber on endpoint where you want to send the node data**
+
 `ros2 run ros2relay net_subscriber __params:=src\ros2relay\params.yml`
 
 **run net_publisher on endpoint where you are locally emitting the data**
+
 `ros2 run ros2relay net_publisher __params:=src\ros2relay\params.yml`
 
 Feel free to separate out the parameters to their own files, I found it easier to keep them in the same file.
