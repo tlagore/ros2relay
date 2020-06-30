@@ -3,7 +3,7 @@
 # topicTypes: the full msg path of the topic 
 #       NOTE: There is currently no support for custom types, only built in types
 # port: port to communicate on
-# server: remote server to connect to. 127.0.0.1 is localhost for local testing
+# server: remote server to connect to. 127.0.0.1 is localhost for local testing.
 # num_listeners: number of threads spawned to handle incoming messages.
 #       NOTE: depends on the number of topics being subscribed to, if you have
 #           too few listeners, you may miss messages. However if you have too many you 
@@ -14,7 +14,7 @@ ros2relay_net_publisher:
         topicTypes: ['std_msgs.msg.Int64', 'std_msgs.msg.String']
         port: 12499
         mode: "udp"
-        server: 127.0.0.1
+        server: "192.168.0.51"
 ros2relay_net_subscriber:
     ros__parameters:
         topics: ['topic', 'topic_num']
