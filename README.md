@@ -24,10 +24,10 @@ both net_publisher and net_subscriber rely on a set of parameters and (currently
 
 `mode` : udp or tcp (lower case currently, will remove case sensitivity later). Use tcp if you don't want to miss any messages. Use udp if speed is preferred to message stream quality.
 
-# net_publisher specific parameters
+## net_publisher specific parameters
 `server` : The address of the remote endpoint to relay topic information to
 
-# net_subscriber specific parameters
+## net_subscriber specific parameters
 `num_listeners` : only applies when mode=udp. The number of threads to handle messages. Increase this value if you have a lot of topic traffic. Too high and you'll start exhausting resources - there is no cap on num_listeners so increase at your own risk.
 
 *example config*
@@ -48,7 +48,7 @@ ros2relay_net_subscriber:
         num_listeners: 5
 ```
 
-## Usage
+# Usage
 **Enter your working directory, for example (if your workspace was `~\dev_ws`)**
 
 `cd ~\dev_ws\src`
