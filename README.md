@@ -10,10 +10,10 @@ net_publisher subscribes to a set of local topics defined by params.yml. It then
 ### net_subscriber
 net_subscriber "subscribes" to the net_publisher by simply listening on the same port. When it receives a message, it publishes it locally on the same topic.
 
-## parameters
+# parameters
 both net_publisher and net_subscriber rely on a set of parameters and (currently) must be set by a parameters file. With this early version, they will crash on startup without setting the parameters (it does not implement default parameters yet).
 
-# synchronized parameters
+## synchronized parameters
 **synchronized parameters must be the same between communicating nodes, they are not synchronized automatically (yet), you must set these to be the same**
 
 `topics` : these define a list of topic names to which the publisher/subscriber should support as they are emitted on the local network
