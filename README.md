@@ -48,6 +48,8 @@ ros2relay_net_subscriber:
         num_listeners: 5
 ```
 
+**Note above:** net_publisher inverts how it declares topics/topicTypes, but they still line up properly (`topic_num` is of type `std_msgs.msg.Int64` and `topic` is of type `std_msgs.msg.String`)
+
 # Usage
 **Enter your working directory, for example (if your workspace was `~\dev_ws`)**
 
