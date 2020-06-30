@@ -18,29 +18,30 @@ class SimplePublisher(Node):
 
     def __init__(self):
         super().__init__('simple_publisher')
-        self.publisher_1 =  self.create_publisher(
-                String,
-                "topic",
-                10
-            )
         self.publisher_2 =  self.create_publisher(
                 Int64,
                 "topic_num",
                 10
             )
 
+        self.publisher_1 =  self.create_publisher(
+                String,
+                "topic",
+                10
+            )
+            
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.i = 0
 
     def timer_callback(self):
-        msg = String()
-        msg.data = "Hello there " + str(self.i) + "!"
-        self.publisher_1.publish(msg)
-
         msg2 = Int64()
         msg2.data = self.i*2
         self.publisher_2.publish(msg2)
+
+        msg = String()
+        msg.data = "Hello there " + str(self.i) + "!"
+        self.publisher_1.publish(msg)
 
         self.get_logger().info(f'Publishing: "{msg.data}"')
         self.get_logger().info(f'Publishing "{msg2.data}"')

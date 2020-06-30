@@ -11,9 +11,14 @@ import time
 class MessageSocket:
     """Reliable socket to ensure delivery of Messages """
 
-    def __init__(self, socket):
-        """constructor for chat client"""
+    def __init__(self, socket, host=None):
+        """constructor for MessageSocket client
+        
+        socket: An initialized socket
+        host: (host, port) tuple of the binding if a server socket
+        """
         self._socket = socket
+        self._host = host
         
     def send_message(self, message):
         """ sends a message to be received by another MessageSocket """
@@ -60,6 +65,19 @@ class MessageSocket:
             data+= packet
         return data
 
+    def sendto(self, message):
+        print(f"attempting to send message to {self._host}")
+        messageBytes = pickle.dumps(message)
+        self._socket.sendto(messageBytes, self._host)
+
+    def recvfrom(self, numBytes):
+        (data, address) = self._socket.recvfrom(numBytes)
+        try:
+            message = pickle.loads(data)
+            return message
+        except:
+            return (None, None)
+        #return self._socket.recvfrom(numBytes)
 
     def close(self):
         try:
@@ -112,5 +130,5 @@ class SocketMessage:
         return self._payload
 
     @property
-    def cipher(self):
-        return self._cipher
+    def topic(self):
+        return self._topic
