@@ -67,10 +67,10 @@ You can manually add the "exec_depends" in your package.xml, or you can use the 
 
 ```
 cd ~\dev_ws\src\ros2relay
-python3 gen.py
+python3 ros2relay\gen.py
 ```
 
-The above will read in your params.yml file and look at your topicTypes variable, adding each of these as exec_depends to your package.xml
+The above will read in your params.yml file and look at your topicTypes variable, adding each of these as exec_depends to your package.xml. **Note: gen.py accesses files relatively and expects them to be named and in the same directory as the repo. Therefore if you change directory into the python package and run `python gen.py` it'll throw some errors.**
 
 **Build ros2relay**
 
