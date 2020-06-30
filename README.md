@@ -7,7 +7,7 @@ ros2relay allows for cross network publishing of ros2 topics. This is my first a
 ros2relay implements two primary nodes:
 
 ### net_publisher
-net_publisher subscribes to a set of local topics defined by params.yml. It then relays any messages that it observes to a remote host/port as defined by the `server` and `port` parameter.
+net_publisher subscribes to a set of local topics defined by params.yml. It then "publishes" any messages that it observes to a remote host/port as defined by the `server` and `port` parameter.
 
 ### net_subscriber
 net_subscriber "subscribes" to the net_publisher by simply listening on the same port. When it receives a message, it publishes it locally on the same topic.
