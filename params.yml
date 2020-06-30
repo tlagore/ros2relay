@@ -1,4 +1,12 @@
+#parameters shoud be mirrors of one another except for server, only net_publisher needs server
 ros2relay_net_publisher:
     ros__parameters:
         topics: ['topic', 'num_topic']
         topicTypes: ['std_msgs.msg.String', 'std_msgs.msg.Int64']
+        port: 12499
+        server: 127.0.0.1
+ros2relay_net_subscriber:
+    ros__parameters:
+        topics: ['topic', 'num_topic']
+        topicTypes: ['std_msgs.msg.String', 'std_msgs.msg.Int64']
+        port: 12499

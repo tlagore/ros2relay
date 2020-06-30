@@ -1,9 +1,11 @@
 import rclpy
 from rclpy.node import Node
 from importlib import import_module
+import socket
+import traceback
 
 #from std_msgs.msg import String
-from ros2relay.message_socket.message_socket import MessageSocket
+from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
 
 class NetworkPublisher(Node):
     """ ros2relay NetworkPublisher subscribes to a set of topics on the local system and publishes them to the network
@@ -12,7 +14,6 @@ class NetworkPublisher(Node):
     """
 
     topic_modules = {}
-    my_timer_topics = {}
     my_subscriptions = {}
 
     def __init__(self):
@@ -37,22 +38,33 @@ class NetworkPublisher(Node):
             self.my_subscriptions[topics[idx]] = self.create_subscription(
                 msg,
                 topics[idx],
-                self.listener_callback,
+                lambda msg : self.listener_callback(msg, topics[idx]),
+                #self.listener_callback,
                 10
             )
             self.get_logger().info(f'Initializing topic {topics[idx]} with type {msg}')
-            self.subscription = self.my_subscriptions[topics[idx]]
-            # self.subscription = self.create_subscription(
-            # String,
-            # 'topic',
-            # self.listener_callback,
-            # 10)
-            # self.subscription  # prevent unused variable warning
-        self.get_logger().info('waiting')
-        
+            self.subscription = self.my_subscriptions[topics[idx]]      
 
-    def listener_callback(self, msg):
-        self.get_logger().info(f'I heard: "{msg.data}"')
+        self.init_socket()  
+
+    def init_socket(self):
+        try:
+            self.declare_parameter('server')
+            self.declare_parameter('port')
+            self.host = self.get_parameter('server').get_parameter_value().string_value
+            self.port = self.get_parameter('port').get_parameter_value().integer_value
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.host, self.port))
+            self._socket = MessageSocket(sock)
+        except:
+            print("error initializing socket")
+            traceback.print_exc()
+
+
+    def listener_callback(self, msg, topic):
+        netMessage = SocketMessage(mType=MessageType.MESSAGE, mTopic=topic, mPayload=msg)
+        self.get_logger().info(f'I heard: "{msg.data}" on topic "{topic}"')
+        self._socket.send_message(netMessage)
 
 
 def main(args=None):

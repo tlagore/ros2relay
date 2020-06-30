@@ -85,8 +85,7 @@ class MessageError(Exception):
 class MessageType(Enum):
     HANDSHAKE = 0
     MESSAGE = 1
-    ACK = 2
-
+    DISCONNECT = 2
 
 class SocketMessage:
     """ """

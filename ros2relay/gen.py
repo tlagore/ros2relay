@@ -20,18 +20,20 @@ def main(args=None):
 
     with open("params.yml", 'r') as stream:
         try:
+            appended = []
             changed = False
             yml_data = yaml.safe_load(stream)
-            topicTypes = yml_data['ros2relay_publisher']['ros__parameters']['topicTypes']
+            topicTypes = yml_data['ros2relay_net_publisher']['ros__parameters']['topicTypes']
             for topicType in topicTypes:
                 lib = topicType.split('.')[0]
                 if lib is not None:
-                    if lib not in exec_depends_inner:
+                    if lib not in exec_depends_inner and lib not in appended:
                         print(f'Parsed {topicType}, not found in exec_depends. Adding {lib}.')
                         newEl = ET.Element('exec_depend')
                         newEl.text = lib
                         root.append(newEl)
                         changed = True
+                        appended += [lib]
             
             if changed:
                 # ET.tostring has a lot of extra new lines, custom pretty print

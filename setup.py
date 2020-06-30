@@ -24,7 +24,8 @@ setup(
     entry_points={
         'console_scripts': [
             'net_publisher = ros2relay.network_publisher:main',
-            'net_subscriber = ros2relay.network_subscriber:main'
+            'net_subscriber = ros2relay.network_subscriber:main',
+            'simple_publisher = ros2relay.simple_publisher:main',
         ],
     },
 )
