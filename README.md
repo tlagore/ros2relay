@@ -1,4 +1,4 @@
-Note this is very incomplete and lots to clean up. If someone finds this before I add it, net_subscriber still needs to publish the message data it receives. Otherwise it's a working prototype. 
+Note this is very incomplete and lots to clean up. If you find any bugs feel free to modify it. Otherwise it's a working prototype. 
 
 # ros2relay
 ros2relay allows for cross network publishing of ros2 topics. This is my first attempt at ros programming, so there's probably a bunch of typical paradigm breaking.
