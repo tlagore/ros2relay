@@ -9,7 +9,6 @@ import threading
 import traceback
 import time
 
-from std_msgs.msg import String,Int64
 from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
 
 class NetworkPublisher(Node):
