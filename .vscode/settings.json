@@ -1,0 +1,6 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/opt/ros/dashing/lib/python3.6/site-packages",
+        "/home/tyrone/code/dev_ws/install/ros2relay/lib/python3.6/site-packages"
+    ]
+}

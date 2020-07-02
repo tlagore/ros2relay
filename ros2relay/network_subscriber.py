@@ -88,6 +88,7 @@ class NetworkSubscriber(Node):
 
     def handle_message(self, msg):
         """ handles a message received by a client """
+        self.get_logger().info(f'msg  on topic {msg.topic}')
         self.my_publishers[msg.topic].publish(msg.payload)
 
     def handle_client(self, args):
@@ -124,7 +125,6 @@ class NetworkSubscriber(Node):
             else:
                 while self._running:
                     msg = self._socket.recvfrom(2048)
-                    self.get_logger().info(f'Got message')
                     if msg is not None:
                         self.handle_message(msg)
         except:
