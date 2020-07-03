@@ -40,18 +40,21 @@ class SimplePublisher(Node):
             self.spawner_threads[i].start()
 
     def low_pri_work(self):
-        msg = String()
-        msg.data = "This is a message with a higher priority, it also has a higher amount of data."
-        while True:
-            self.publisher_1.publish(msg)
-            time.sleep(0.001)
-
-    def hi_pri_work(self):
         msg = Int64()
+        
         msg.data = 29481
         while True:
-            self.publisher_2.publish(msg)
-            time.sleep(0.2)
+           self.publisher_2.publish(msg)
+           time.sleep(0.2)
+        
+
+    def hi_pri_work(self):
+        msg = String()
+        msg.data = "This is a message with a higher priority, it also has a higher amount of data."
+
+        # super bad form, publish in a loop non-stop. Simple to test 
+        while True:
+            self.publisher_1.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)

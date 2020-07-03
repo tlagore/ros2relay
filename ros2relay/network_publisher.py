@@ -12,6 +12,19 @@ import traceback
 import time
 
 from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
+from ros2relay.message_socket.message_metrics import MessageMetricsHandler
+
+# class obtained from combination of https://stackoverflow.com/a/16782490/4089216 and https://stackoverflow.com/a/16782391/4089216
+class TimeoutLock(object):
+    def __init__(self):
+        self._lock = threading.Lock()
+
+    @contextmanager
+    def acquire_timeout(self, timeout):
+        result = self._lock.acquire(timeout=timeout)
+        yield result
+        if result:
+            self._lock.release()
 
 # class obtained from https://stackoverflow.com/a/54028394/4089216
 @total_ordering
@@ -45,6 +58,8 @@ class NetworkPublisher(Node):
     # each worker thread will have a socket, each worker_id is between 0 and worker_count - 1
     # each workers socket belongs at sockets[worker_id]
     sockets = []
+    # locks only used for reconnect on tcp
+    socket_locks = []
 
     # maintain workers to join later
     workers = []
@@ -52,8 +67,9 @@ class NetworkPublisher(Node):
     # need to do some testing with 1000 as max value for priority queue
     message_queue = queue.PriorityQueue(1000)
 
-
-    message_count = 0
+    # message count per thread
+    message_counts = []
+    # sent_count = 0
 
 
     def __init__(self):
@@ -95,6 +111,8 @@ class NetworkPublisher(Node):
         self.running = True
 
         for i in range(0, self.worker_count):
+            self.socket_locks.append(TimeoutLock())
+            self.message_counts.append(0)
             self.init_socket_with_rety(i)
 
         # as worker threads can access the socket list, initialize workers in separate loop after initial sockets
@@ -102,6 +120,11 @@ class NetworkPublisher(Node):
         for i in range(0, self.worker_count):
             self.workers.append(threading.Thread(target=self.work, args=((i,))))
             self.workers[i].start()
+
+        self.metric_handler = MessageMetricsHandler(self.worker_count)
+
+        timer_period = 1  # seconds
+        self.metric_publisher = self.create_timer(timer_period, self.metric_handler.publish_metrics)
 
 
     def _declare_parameters(self):
@@ -117,17 +140,19 @@ class NetworkPublisher(Node):
         """ attempts to initialize the socket with retries for the worker_id. retries is only attempted for tcp connections """
 
         if self.mode == "tcp":
-            connected = False
-            while not connected:
-                try:
-                    self._init_socket_tcp(worker_id)
-                    connected = True
-                    self.get_logger().info('Connection successful!')
-                except Exception as e:
-                    self.get_logger().error(f"Error initializing socket exception: {str(e)} worker id {workerId}")
-                    for i in range(1, 5):
-                        self.get_logger().info(f'Retrying in {5-i}')
-                        time.sleep(1)
+            # acquire lock for this socket in 100 ms or abandon, another thread is handling the socket reconnect
+            with self.socket_locks[worker_id].acquire_timeout(0.1):
+                connected = False
+                while not connected:
+                    try:
+                        self._init_socket_tcp(worker_id)
+                        connected = True
+                        self.get_logger().info('Connection successful!')
+                    except Exception as e:
+                        self.get_logger().error(f"Error initializing socket exception: {str(e)} worker id {workerId}")
+                        for i in range(1, 5):
+                            self.get_logger().info(f'Retrying in {5-i}')
+                            time.sleep(1)
         elif self.mode == "udp": 
             self._init_socket_udp(worker_id)
         else:
@@ -141,7 +166,7 @@ class NetworkPublisher(Node):
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((self.host, self.port))
-        if len(self.sockets) < worker_id:
+        if len(self.sockets) - 1 < worker_id:
             self.sockets.append(MessageSocket(sock))
         else:
             # socket was already initialized, MessageSocket implements a try:catch
@@ -169,11 +194,14 @@ class NetworkPublisher(Node):
                 # blocking request - timeout 3 seconds
                 messageSent = False
                 try:
+                    # throws queue.Empty exception if it fails to get an item in 3 seconds
                     priorityItem = self.message_queue.get(True, 3)
+                    self.message_counts[worker_id] += 1
                     self.send_message(priorityItem.item, worker_id)
-                    if self.message_count % 100 == 0:
-                        self.get_logger().info(f"Approximate queue size: {self.message_queue.qsize()}")
+                    messageSent = True
+
                 except (ConnectionResetError, BrokenPipeError, ConnectionResetError) as e:
+                    # should maybe record number of times connection breaks? Will get wordy
                     self.get_logger().error(f"Error sending socket message: {str(e)}")
                     self.init_socket_with_rety(worker_id)
                 except queue.Empty:
@@ -204,19 +232,23 @@ class NetworkPublisher(Node):
 
         try:
             self.message_queue.put_nowait(item)
-            self.message_count += 1
         except queue.Full as ex:
-            ## TODO handle queue full issue - shouldn't hit this too often
-            self.get_logger().error(f'Error queuing message {str(ex)}')
+            ## TODO handle queue full issue - shouldn't hit this too often, we either need more workers or too much data is being sent
+            # self.get_logger().error(f'Queue is full! {str(ex)}')
+            print(f"queue full: {str(ex)}")
+            # self.dropped_messages += 1
         except Exception as ex:
             # some other error
             self.get_logger().error(f'Error queuing message {str(ex)}')
 
     def send_message(self, message, worker_id):
         if self.mode == "tcp":
-            self.sockets[worker_id].send_message(message)
+            bytesSent = self.sockets[worker_id].send_message(message)
         elif self.mode == "udp":
-            self.sockets[worker_id].sendto(message)
+            bytesSent = self.sockets[worker_id].sendto(message)
+
+        if bytesSent and bytesSent > 0:
+            self.metric_handler.handle_message(worker_id, bytesSent)
 
     def shutdown(self):
         self.running = False

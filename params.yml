@@ -23,9 +23,9 @@ ros2relay_net_publisher:
             1
         ]
         port: 12499
-        mode: "udp"
+        mode: 'udp'
         server: "192.168.0.100"
-        numWorkers: 20
+        numWorkers: 40
 ros2relay_net_subscriber:
     ros__parameters:
         topics: [
@@ -38,4 +38,4 @@ ros2relay_net_subscriber:
         mode: 'udp'
         port: 12499
         # only applies to UDP
-        num_listeners: 20
+        num_listeners: 40

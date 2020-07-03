@@ -30,11 +30,13 @@ class MessageSocket:
         self._socket.sendall(header)
         self._socket.sendall(messageBytes)
 
+        return len(messageBytes)
+
     def recv_message(self):
         """ Receives a message and returns it unpickled """
-    
+        
         header = self.recvall(16) 
-            
+
         messageSize = self.get_msg_size(header)
         messageBytes = self.recvall(messageSize)
         
@@ -68,12 +70,14 @@ class MessageSocket:
     def sendto(self, message):
         messageBytes = pickle.dumps(message)
         self._socket.sendto(messageBytes, self._host)
+        return len(messageBytes)
 
     def recvfrom(self, numBytes):
         (data, address) = self._socket.recvfrom(numBytes)
         try:
+            messageSize = len(data)
             message = pickle.loads(data)
-            return message
+            return (message, messageSize)
         except:
             return (None, None)
         #return self._socket.recvfrom(numBytes)
