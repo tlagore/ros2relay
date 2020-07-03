@@ -82,8 +82,8 @@ class MessageSocket:
     def close(self):
         try:
             self._socket.close()
-        except:
-            print("!! Error closing socket", file=sys.stderr)
+        except Exception as ex:
+            print(f"!! Error closing socket {ex}", file=sys.stderr)
                                     
     def __del__(self):
         """destructor for chat client"""

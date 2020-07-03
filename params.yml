@@ -10,16 +10,23 @@
 #           will tie up threads on your system.
 ros2relay_net_publisher:
     ros__parameters:
-        topics: ['camera/depth/camera_info',
+        topics: [
+            'camera/depth/camera_info',
             'camera/depth/color/points',
             'camera/depth/image_rect_raw',
-            'parameter_events',
             'tf_static']
-        topicTypes: ['sensor_msgs.msg.CameraInfo',
+        topicTypes: [
+            'sensor_msgs.msg.CameraInfo',
             'sensor_msgs.msg.PointCloud2',
             'sensor_msgs.msg.Image',
-            'rcl_interfaces.msg.ParameterEvent',
-            'tf2_msgs.msg.TFMessage']
+            'tf2_msgs.msg.TFMessage'
+        ]
+        topicPriorities: [
+            1,
+            0,
+            0,
+            1
+        ]
         port: 12499
         mode: "udp"
         server: "192.168.0.51"

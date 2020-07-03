@@ -118,8 +118,9 @@ class NetworkSubscriber(Node):
         try:
             if self.mode == "tcp":
                 while self._running:
-                    self._socket.listen(5)
+                    self._socket.listen(20)
                     (client, addr) = self._socket.accept()
+                    self.get_logger().info("Got a client {client}")
                     clientThread = threading.Thread(target=self.handle_client, args=((client, addr),))
                     clientThread.start()
             else:
