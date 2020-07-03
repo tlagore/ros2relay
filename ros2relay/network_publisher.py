@@ -2,14 +2,46 @@ import rclpy
 from rclpy.node import Node
 
 from contextlib import contextmanager
-from functools import partial
+from functools import partial, total_ordering
 from importlib import import_module
+import queue
 import socket
+from typing import Any
 import threading
 import traceback
 import time
 
 from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
+from ros2relay.message_socket.message_metrics import MessageMetricsHandler
+
+# class obtained from combination of https://stackoverflow.com/a/16782490/4089216 and https://stackoverflow.com/a/16782391/4089216
+class TimeoutLock(object):
+    def __init__(self):
+        self._lock = threading.Lock()
+
+    @contextmanager
+    def acquire_timeout(self, timeout):
+        result = self._lock.acquire(timeout=timeout)
+        yield result
+        if result:
+            self._lock.release()
+
+# class obtained from https://stackoverflow.com/a/54028394/4089216
+@total_ordering
+class PrioritizedItem:
+    def __init__(self, priority, item):
+        self.priority = priority
+        self.item = item
+
+    def __eq__(self, other):
+        if not isinstance(other, __class__):
+            return NotImplemented
+        return self.priority == other.priority
+
+    def __lt__(self, other):
+        if not isinstance(other, __class__):
+            return NotImplemented
+        return self.priority < other.priority
 
 class NetworkPublisher(Node):
     """ ros2relay NetworkPublisher subscribes to a set of topics on the local system and publishes them to the network
@@ -17,9 +49,28 @@ class NetworkPublisher(Node):
         Requires that a NetworkSubscriber be running on the target endpoint
     """
 
-    connection_lock = threading.Lock()
-    topic_modules = {}
+    # priority of the topic, where a lower value indicates a higher priority
+    topic_priorities = {}
+
+    # keep reference to subscriptions
     my_subscriptions = {}
+
+    # each worker thread will have a socket, each worker_id is between 0 and worker_count - 1
+    # each workers socket belongs at sockets[worker_id]
+    sockets = []
+    # locks only used for reconnect on tcp
+    socket_locks = []
+
+    # maintain workers to join later
+    workers = []
+
+    # need to do some testing with 1000 as max value for priority queue
+    message_queue = queue.PriorityQueue(1000)
+
+    # message count per thread
+    message_counts = []
+    # sent_count = 0
+
 
     def __init__(self):
         super().__init__('ros2relay_net_publisher')
@@ -31,15 +82,18 @@ class NetworkPublisher(Node):
         self.mode = self.get_parameter('mode').get_parameter_value().string_value 
         self.host = self.get_parameter('server').get_parameter_value().string_value
         self.port = self.get_parameter('port').get_parameter_value().integer_value
+        topic_priority_list = self.get_parameter('topicPriorities').get_parameter_value().integer_array_value
 
-        self.init_socket_with_rety() 
+        # if tcp, this value should be less than or equal to the number of clients the net_subscriber can handle
+        # currently hardcoded at 20
+        self.worker_count = self.get_parameter('numWorkers').get_parameter_value().integer_value
 
         for idx, tType in enumerate(topicTypes):
             module_parts = tType.split('.')
             module_name = module_parts[0] + '.' + module_parts[1]
             module = import_module(module_name)
             msg = getattr(module, module_parts[2])
-            self.topic_modules[topics[idx]] = msg
+            self.topic_priorities[topics[idx]] = topic_priority_list[idx]
 
             func = partial(self.listener_callback, topics[idx])
 
@@ -47,56 +101,123 @@ class NetworkPublisher(Node):
                 msg,
                 topics[idx],
                 func,
-                #lambda input : self.listener_callback(input, topics[idx]),
                 10
             )
-            self.get_logger().info(f'Initializing topic {topics[idx]} with type ')
 
-    
+            self.get_logger().info(f'Initializing topic {topics[idx]} with type {tType}')
+
+        self.running = True
+
+        for i in range(0, self.worker_count):
+            self.socket_locks.append(TimeoutLock())
+            self.message_counts.append(0)
+            self.init_socket_with_rety(i)
+
+        # as worker threads can access the socket list, initialize workers in separate loop after initial sockets
+        # to keep concurrence. Each worker thread only accesses its own position in the array once initialized
+        for i in range(0, self.worker_count):
+            self.workers.append(threading.Thread(target=self.work, args=((i,))))
+            self.workers[i].start()
+
+        self.get_logger().info(f"{self.worker_count} workers started. Sending to {self.host}:{self.port} mode = {self.mode}")
+
+        self.metric_handler = MessageMetricsHandler(self.worker_count)
+
+        timer_period = 1  # seconds
+        self.metric_publisher = self.create_timer(timer_period, self.metric_handler.publish_metrics)
+
+
     def _declare_parameters(self):
         self.declare_parameter('server')
         self.declare_parameter('port')
         self.declare_parameter('topics')
         self.declare_parameter('topicTypes')
+        self.declare_parameter('topicPriorities')
         self.declare_parameter('mode')
-
-    @contextmanager
-    def acquire_timeout(self, lock, timeout):
-        result = lock.acquire(timeout=timeout)
-        yield result
-        if result:
-            lock.release()
-
-    def init_socket_with_rety(self):
-        """ attempts to initialize the socket with retries. Acquires connection lock so only one thread  """
+        self.declare_parameter('numWorkers')
+        
+    def init_socket_with_rety(self, worker_id):
+        """ attempts to initialize the socket with retries for the worker_id. retries is only attempted for tcp connections """
 
         if self.mode == "tcp":
-            # if we can't acquire the lock in 100ms, abort - don't tie up threads
-            with self.acquire_timeout(self.connection_lock, 0.1):
+            # acquire lock for this socket in 100 ms or abandon, another thread is handling the socket reconnect
+            with self.socket_locks[worker_id].acquire_timeout(0.1):
                 connected = False
                 while not connected:
                     try:
-                        self._init_socket()
+                        self._init_socket_tcp(worker_id)
                         connected = True
                         self.get_logger().info('Connection successful!')
                     except Exception as e:
-                        self.get_logger().error(f"Error initializing socket exception: {str(e)}")
+                        self.get_logger().error(f"Error initializing socket exception: {str(e)} worker id {workerId}")
                         for i in range(1, 5):
                             self.get_logger().info(f'Retrying in {5-i}')
                             time.sleep(1)
         elif self.mode == "udp": 
-            self._init_socket_udp()
+            self._init_socket_udp(worker_id)
         else:
             raise Exception("Mode must be one of 'udp' or 'tcp'")
         
-    def _init_socket(self):
+    def _init_socket_tcp(self, worker_id):
+        """
+        initializes a tcp socket. If the socket was already initialized then it attempts to close the socket before assigning it to our
+        active sockets
+        """
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((self.host, self.port))
-        self._socket = MessageSocket(sock)
+        if len(self.sockets) - 1 < worker_id:
+            self.sockets.append(MessageSocket(sock))
+        else:
+            # socket was already initialized, MessageSocket implements a try:catch
+            self.sockets[worker_id].close()
+            self.sockets[worker_id] = MessageSocket(sock)
 
-    def _init_socket_udp(self):
+    def _init_socket_udp(self, worker_id):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._socket = MessageSocket(sock, (self.host, self.port))
+
+        if len(self.sockets) - 1 < worker_id:
+            self.sockets.append(MessageSocket(sock, (self.host, self.port)))
+        else:
+            # socket was already initialized, MessageSocket implements a try:catch
+            self.sockets[worker_id].close()
+            self.sockets[worker_id] = MessageSocket(sock, (self.host, self.port))
+
+    def work(self, worker_id):
+        """
+        work thread, retrieve items from the priority queue and send the message
+        """
+
+        try:
+            while self.running:
+                # blocking request - timeout 3 seconds
+                messageSent = False
+                try:
+                    # throws queue.Empty exception if it fails to get an item in 3 seconds
+                    priorityItem = self.message_queue.get(True, 3)
+                    self.message_counts[worker_id] += 1
+                    self.send_message(priorityItem.item, worker_id)
+                    messageSent = True
+
+                except (ConnectionResetError, BrokenPipeError, ConnectionResetError) as e:
+                    # should maybe record number of times connection breaks? Will get wordy
+                    self.get_logger().error(f"Error sending socket message: {str(e)}")
+                    self.init_socket_with_rety(worker_id)
+                except queue.Empty:
+                    priorityItem = None
+                    pass
+                finally:
+                    # give one more attempt at sending the message if we failed
+                    if not messageSent and priorityItem is not None:
+                        try:
+                            self.send_message(priorityItem.item, worker_id)
+                        except:
+                            pass
+        except Exception as ex:
+            self.get_logger().error(f"Worker thread {worker_id} exitting unexpectedly with error: {str(ex)}")
+        finally:
+            self.get_logger().info(f"Worker thread {worker_id} finishing.")
+
 
     def listener_callback(self, topic, msg):
         """ 
@@ -105,29 +226,42 @@ class NetworkPublisher(Node):
             a single retry on the message, otherwise it will be lost and all subsequent
             messsages until the connection is re-established
         """
-        messageSent = False
-
         netMessage = SocketMessage(mType=MessageType.MESSAGE, mTopic=topic, mPayload=msg)
-        self.get_logger().info(f'I heard: "{msg}" on topic "{topic}"')
-        try:
-            self.send_message(netMessage)
-            messageSent = True
-        except (ConnectionResetError, BrokenPipeError, ConnectionResetError) as e:
-            self.get_logger().error(f"Error sending socket message: {str(e)}")
-            self.init_socket_with_rety()
-        finally:
-            # give one more attempt at sending the message if we failed
-            if not messageSent:
-                try:
-                    self.send_message(netMessage)
-                except:
-                    pass
+        item = PrioritizedItem(priority=self.topic_priorities[topic], item=netMessage)
 
-    def send_message(self, message):
+        try:
+            self.message_queue.put_nowait(item)
+        except queue.Full as ex:
+            ## TODO handle queue full issue - shouldn't hit this too often, we either need more workers or too much data is being sent
+            # self.get_logger().error(f'Queue is full! {str(ex)}')
+            print(f"queue full: {str(ex)}")
+            # self.dropped_messages += 1
+        except Exception as ex:
+            # some other error
+            self.get_logger().error(f'Error queuing message {str(ex)}')
+
+    def send_message(self, message, worker_id):
         if self.mode == "tcp":
-            self._socket.send_message(message)
-        else:
-            self._socket.sendto(message)
+            bytesSent = self.sockets[worker_id].send_message(message)
+        elif self.mode == "udp":
+            bytesSent = self.sockets[worker_id].sendto(message)
+
+        if bytesSent and bytesSent > 0:
+            self.metric_handler.handle_message(worker_id, bytesSent)
+
+    def shutdown(self):
+        self.running = False
+
+        for i in range(0, self.worker_count):
+            try:
+                self.sockets[i].close()
+            except Exception as ex:
+                self.get_logger().warning(f"Exception closing down worker socket {i}, exception: {str(ex)}")
+
+        for i in range(0, self.worker_count):
+            self.get_logger().info(f"Joining worker thread {i}")
+            # 5 second wait before skipping thred
+            self.workers[i].join(5)
 
 
 def main(args=None):
@@ -135,10 +269,18 @@ def main(args=None):
 
     network_publisher = NetworkPublisher()
 
-    rclpy.spin(network_publisher)
+    try:
+        rclpy.spin(network_publisher)
 
-    network_publisher.destroy_node()
-    rclpy.shutdown()
+        network_publisher.shutdown()
+        network_publisher.destroy_node()
+        rclpy.shutdown()
+    except Exception as ex:
+        traceback.print_exc()
+
+        print("!! SIGINT received - attempting to clean up remaining threads...please wait...")
+        network_publisher.shutdown()
+        network_publisher.destroy_node()
 
 
 if __name__ == '__main__':

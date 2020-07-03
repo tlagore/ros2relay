@@ -12,9 +12,6 @@
   <export>
     <build_type>ament_python</build_type>
   </export>
-  <exec_depend>sensor_msgs/msg/CameraInfo</exec_depend>
-  <exec_depend>sensor_msgs/msg/Image</exec_depend>
-  <exec_depend>sensor_msgs/msg/PointCloud2</exec_depend>
-  <exec_depend>rcl_interfaces/msg/ParameterEvent</exec_depend>
-  <exec_depend>tf2_msgs/msg/TFMessage</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
 </package>

@@ -30,11 +30,13 @@ class MessageSocket:
         self._socket.sendall(header)
         self._socket.sendall(messageBytes)
 
+        return len(messageBytes)
+
     def recv_message(self):
         """ Receives a message and returns it unpickled """
-    
+        
         header = self.recvall(16) 
-            
+
         messageSize = self.get_msg_size(header)
         messageBytes = self.recvall(messageSize)
         
@@ -66,15 +68,16 @@ class MessageSocket:
         return data
 
     def sendto(self, message):
-        print(f"attempting to send message to {self._host}")
         messageBytes = pickle.dumps(message)
         self._socket.sendto(messageBytes, self._host)
+        return len(messageBytes)
 
     def recvfrom(self, numBytes):
         (data, address) = self._socket.recvfrom(numBytes)
         try:
+            messageSize = len(data)
             message = pickle.loads(data)
-            return message
+            return (message, messageSize)
         except:
             return (None, None)
         #return self._socket.recvfrom(numBytes)
@@ -82,8 +85,8 @@ class MessageSocket:
     def close(self):
         try:
             self._socket.close()
-        except:
-            print("!! Error closing socket", file=sys.stderr)
+        except Exception as ex:
+            print(f"!! Error closing socket {ex}", file=sys.stderr)
                                     
     def __del__(self):
         """destructor for chat client"""

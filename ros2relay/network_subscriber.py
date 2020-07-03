@@ -5,11 +5,55 @@ import threading
 import traceback
 
 from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
+from ros2relay.message_socket.message_metrics import MessageMetricsHandler
 
-#ros imports
 from rclpy.node import Node
-#from std_msgs.msg import String
-#from std_msgs.msg import Int64
+
+class MessageMetrics:
+    def __init__(self):
+        """ """
+        self.byte_sum = 0
+        self.message_count = 0
+
+    def increment_message_count(self, message_size):
+        self.message_count += 1
+        self.byte_sum += message_size
+
+    def get_and_reset_metrics(self):
+        m_count = self.message_count
+        b_sum = self.byte_sum
+
+        self.message_count = 0
+        self.byte_sum = 0
+
+        return (m_count, b_sum)
+
+
+class MessageMetricsHandler:
+    metric_handlers = []
+    
+    def __init__(self, num_handlers):
+        """ """
+        for i in range(num_handlers):
+            self.metric_handlers.append(MessageMetrics())
+
+    def handle_message(self, handler, message_size):
+        if handler > len(self.metric_handlers) - 1 or handler < 0:
+            raise ValueError(f"Handler must be between 0 and {len(self.metric_handlers) - 1}")
+
+        self.metric_handlers[handler].increment_message_count(message_size)
+
+    def publish_metrics(self):
+        """ """
+        # list of tuples (message_count, byte_sum) for each worker
+        vals = [m.get_and_reset_metrics() for m in self.metric_handlers]
+
+        # summed tuple, [sum(message_count), sum(byte_sum)]
+        sums = [sum(x) for x in zip(*vals)]
+
+        message = f"Messages processed/second: {sums[0]}. KBytes processed/second: {(sums[1] / 1024):.2f}"
+        print(message.ljust(len(message)+20), end='')
+        print("\r", end='')
 
 
 class NetworkSubscriber(Node):
@@ -20,6 +64,7 @@ class NetworkSubscriber(Node):
     """
     listener_threads = []
     topic_modules = {}
+    sockets = []
 
     """ [topic] = publisher """
     my_publishers = {}
@@ -34,9 +79,6 @@ class NetworkSubscriber(Node):
         self.mode = self.get_parameter('mode').get_parameter_value().string_value
         self.port = self.get_parameter('port').get_parameter_value().integer_value
         self.num_listeners = self.get_parameter('num_listeners').get_parameter_value().integer_value
-
-        print(topicTypes)
-        print(topics)
 
         # loop through topics & import their types dynamically
         for idx, tType in enumerate(topicTypes):
@@ -53,9 +95,14 @@ class NetworkSubscriber(Node):
                 10
             )
 
-        self.init_socket()
+        self.metric_handler = MessageMetricsHandler(self.num_listeners)
 
-        self.i = 0
+        self.init_sockets()
+
+        self.get_logger().info(f"{self.num_listeners} workers started. Listening on port {self.port} mode = {self.mode}")
+
+        timer_period = 1  # seconds
+        self.metric_publisher = self.create_timer(timer_period, self.metric_handler.publish_metrics)
 
     def _declare_parameters(self):
         self.declare_parameter('topics')
@@ -64,7 +111,7 @@ class NetworkSubscriber(Node):
         self.declare_parameter('mode')
         self.declare_parameter('num_listeners')
 
-    def init_socket(self):
+    def init_sockets(self):
         self.get_logger().info(f'Intializing listener socket on port "{self.port}" - mode: {self.mode}')
 
         if self.mode == "tcp":
@@ -73,23 +120,30 @@ class NetworkSubscriber(Node):
             # note bind is takinga  tuple as one argument
             self._socket.bind(("0.0.0.0", self.port))
             self._running = True
-            self._listen_thread = threading.Thread(target=self.listen)
+            # tcp has only one worker
+            self._listen_thread = threading.Thread(target=self.listen, args=((0,)))
             self._listen_thread.start()
-        elif self.mode == "udp":
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.bind(("0.0.0.0", self.port))
-            self._socket = MessageSocket(sock)
-            self._running = True
+        elif self.mode == "udp":   
             for i in range(0, self.num_listeners):
-                self.listener_threads.append(threading.Thread(target=self.listen))
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+                try:
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                except AttributeError as ex:
+                    self.get_logger().fatal(f'Error when attempting to set socket to reuse port: {traceback.format_exc()}')
+                    raise ex
+
+                sock.bind(("0.0.0.0", self.port))
+                self.sockets.append(MessageSocket(sock))
+                self._running = True
+                self.listener_threads.append(threading.Thread(target=self.listen, args=((i,))))
                 self.listener_threads[i].start()
         else:
             raise Exception("Mode parameter must be one of 'udp' or 'tcp'")
 
     def handle_message(self, msg):
         """ handles a message received by a client """
-        self.get_logger().info(f'msg  on topic {msg.topic}')
-        self.my_publishers[msg.topic].publish(msg.payload)
+        # self.my_publishers[msg.topic].publish(msg.payload)
 
     def handle_client(self, args):
         """  """
@@ -106,26 +160,26 @@ class NetworkSubscriber(Node):
             else:
                 print("Client {0} has disconneccted".format(addr[0]))
         except:
-            print("Error handling client in PiLogee.work. Disconnecting from client {0}".format(addr[0]))
+            print("Error handling client. Disconnecting from client {0}".format(addr[0]))
 
             traceback.print_exc()
 
-    def listen(self):
+    def listen(self, worker_id):
         """ listens for clients """
-
-        self.get_logger().info('Listening for clients')
 
         try:
             if self.mode == "tcp":
                 while self._running:
-                    self._socket.listen(5)
+                    self._socket.listen(self.num_listeners)
                     (client, addr) = self._socket.accept()
+                    self.get_logger().info(f"Worker Got a client {client}")
                     clientThread = threading.Thread(target=self.handle_client, args=((client, addr),))
                     clientThread.start()
             else:
                 while self._running:
-                    msg = self._socket.recvfrom(2048)
+                    (msg, msgSize) = self.sockets[worker_id].recvfrom(65535)
                     if msg is not None:
+                        self.metric_handler.handle_message(worker_id, msgSize)
                         self.handle_message(msg)
         except:
             if self._running:
@@ -134,19 +188,36 @@ class NetworkSubscriber(Node):
             else:
                 print("Shutting down")
 
+    def shutdown(self):
+        self.get_logger().warning("Received shutdown signal.")
+        self._running = False
+        self._socket.close()
+        for i in range(self.num_listeners):
+            self.get_logger().info(f"Joining worker thread {i}")
+            listener_threads[i].join(5)
+
 def main(args=None):
     rclpy.init(args=args)
     print(args)
 
     network_subscriber = NetworkSubscriber()
 
-    rclpy.spin(network_subscriber)
+    try:
+        rclpy.spin(network_subscriber)
 
-    # Destroy the node explicitly
-    # (optional - otherwise it will be done automatically
-    # when the garbage collector destroys the node object)
-    network_subscriber.destroy_node()
-    rclpy.shutdown()
+        network_subscriber.shutdown()
+        # Destroy the node explicitly
+        # (optional - otherwise it will be done automatically
+        # when the garbage collector destroys the node object)
+        network_subscriber.destroy_node()
+        rclpy.shutdown()
+    except Exception as ex:
+        traceback.print_exc()
+        
+        network_subscriber.shutdown()
+        network_subscriber.destroy_node()
+        rclpy.shutdown()
+           
 
 
 if __name__ == '__main__':
