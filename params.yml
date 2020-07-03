@@ -10,15 +10,18 @@
 #           will tie up threads on your system.
 ros2relay_net_publisher:
     ros__parameters:
-        topics: [
-            'topic',
-            'topic_num']
-        topicTypes: [
-            'std_msgs.msg.String',
-            'std_msgs.msg.Int64'
-        ]
+        topics: ['camera/depth/camera_info',
+            'camera/depth/color/points',
+            'camera/depth/image_rect_raw',
+            'tf_static']
+        topicTypes: ['sensor_msgs.msg.CameraInfo',
+            'sensor_msgs.msg.PointCloud2',
+            'sensor_msgs.msg.Image',
+            'tf2_msgs.msg.TFMessage']
         # priorities for each topic type - lower number = higher priority
         topicPriorities: [
+            1,
+            1,
             0,
             1
         ]
@@ -29,12 +32,33 @@ ros2relay_net_publisher:
 ros2relay_net_subscriber:
     ros__parameters:
         topics: [
-            'topic',
-            'topic_num']
+            'camera/aligned_depth_to_color/camera_info',
+            'camera/aligned_depth_to_color/image_raw',
+            'camera/color/camera_info',
+            'camera/color/image_raw',
+            'camera/depth/camera_info',
+            'camera/depth/color/points',
+            'camera/depth/image_rect_raw',
+            'camera/infra1/camera_info',
+            'camera/infra1/image_rect_raw',
+            'camera/infra2/camera_info',
+            'camera/infra2/image_rect_raw',
+            'parameter_events',
+            'tf_static']
         topicTypes: [
-            'std_msgs.msg.String',
-            'std_msgs.msg.Int64'
-        ]
+            'sensor_msgs.msg.CameraInfo',
+            'sensor_msgs.msg.Image',
+            'sensor_msgs.msg.CameraInfo',
+            'sensor_msgs.msg.Image',
+            'sensor_msgs.msg.CameraInfo',
+            'sensor_msgs.msg.PointCloud2',
+            'sensor_msgs.msg.Image',
+            'sensor_msgs.msg.CameraInfo',
+            'sensor_msgs.msg.Image',
+            'sensor_msgs.msg.CameraInfo',
+            'sensor_msgs.msg.Image',
+            'rcl_interfaces.msg.ParameterEvent',
+            'tf2_msgs.msg.TFMessage']
         mode: 'udp'
         port: 12499
         # only applies to UDP
