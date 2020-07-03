@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 
 from contextlib import contextmanager
-from functools import partial
+from functools import partial, total_ordering
 from importlib import import_module
 import queue
 import socket
@@ -13,8 +13,7 @@ import time
 
 from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
 
-from functools import total_ordering
-
+# class obtained from https://stackoverflow.com/a/54028394/4089216
 @total_ordering
 class PrioritizedItem:
     def __init__(self, priority, item):
