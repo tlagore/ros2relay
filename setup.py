@@ -26,6 +26,7 @@ setup(
             'net_publisher = ros2relay.network_publisher:main',
             'net_subscriber = ros2relay.network_subscriber:main',
             'simple_publisher = ros2relay.simple_publisher:main',
+            'highspeed_publisher = ros2relay.highspeed_publisher:main',
         ],
     },
 )

@@ -35,9 +35,6 @@ class NetworkSubscriber(Node):
         self.port = self.get_parameter('port').get_parameter_value().integer_value
         self.num_listeners = self.get_parameter('num_listeners').get_parameter_value().integer_value
 
-        print(topicTypes)
-        print(topics)
-
         # loop through topics & import their types dynamically
         for idx, tType in enumerate(topicTypes):
             module_parts = tType.split('.')
@@ -81,15 +78,15 @@ class NetworkSubscriber(Node):
             self._socket = MessageSocket(sock)
             self._running = True
             for i in range(0, self.num_listeners):
-                self.listener_threads.append(threading.Thread(target=self.listen))
+                self.listener_threads.append(threading.Thread(target=self.listen, args=((i,))))
                 self.listener_threads[i].start()
         else:
             raise Exception("Mode parameter must be one of 'udp' or 'tcp'")
 
     def handle_message(self, msg):
         """ handles a message received by a client """
-        self.get_logger().info(f'msg  on topic {msg.topic}')
-        self.my_publishers[msg.topic].publish(msg.payload)
+        self.get_logger().info(f'msg  on topic {msg.topic} :: {str(msg.payload)}')
+        #self.my_publishers[msg.topic].publish(msg.payload)
 
     def handle_client(self, args):
         """  """
@@ -110,10 +107,10 @@ class NetworkSubscriber(Node):
 
             traceback.print_exc()
 
-    def listen(self):
+    def listen(self, worker_id):
         """ listens for clients """
 
-        self.get_logger().info('Listening for clients')
+        self.get_logger().info(f'Worker {worker_id} listening for clients')
 
         try:
             if self.mode == "tcp":
@@ -125,7 +122,7 @@ class NetworkSubscriber(Node):
                     clientThread.start()
             else:
                 while self._running:
-                    msg = self._socket.recvfrom(2048)
+                    msg = self._socket.recvfrom(65535)
                     if msg is not None:
                         self.handle_message(msg)
         except:
@@ -135,19 +132,36 @@ class NetworkSubscriber(Node):
             else:
                 print("Shutting down")
 
+    def shutdown(self):
+        self.get_logger().warning("Received shutdown signal.")
+        self._running = False
+        self._socket.close()
+        for i in range(self.num_listeners):
+            elf.get_logger().info(f"Joining worker thread {i}")
+            listener_threads[i].join(5)
+
 def main(args=None):
     rclpy.init(args=args)
     print(args)
 
     network_subscriber = NetworkSubscriber()
 
-    rclpy.spin(network_subscriber)
+    try:
+        rclpy.spin(network_subscriber)
 
-    # Destroy the node explicitly
-    # (optional - otherwise it will be done automatically
-    # when the garbage collector destroys the node object)
-    network_subscriber.destroy_node()
-    rclpy.shutdown()
+        network_subscriber.shutdown()
+        # Destroy the node explicitly
+        # (optional - otherwise it will be done automatically
+        # when the garbage collector destroys the node object)
+        network_subscriber.destroy_node()
+        rclpy.shutdown()
+    except Exception as ex:
+        traceback.print_exc()
+        
+        network_subscriber.shutdown()
+        network_subscriber.destroy_node()
+        rclpy.shutdown()
+           
 
 
 if __name__ == '__main__':

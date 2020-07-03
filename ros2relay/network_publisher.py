@@ -36,12 +36,24 @@ class NetworkPublisher(Node):
         Requires that a NetworkSubscriber be running on the target endpoint
     """
 
+    # priority of the topic, where a lower value indicates a higher priority
     topic_priorities = {}
+
     # keep reference to subscriptions
     my_subscriptions = {}
+
+    # each worker thread will have a socket, each worker_id is between 0 and worker_count - 1
+    # each workers socket belongs at sockets[worker_id]
     sockets = []
+
+    # maintain workers to join later
     workers = []
+
+    # need to do some testing with 1000 as max value for priority queue
     message_queue = queue.PriorityQueue(1000)
+
+
+    message_count = 0
 
 
     def __init__(self):
@@ -54,17 +66,20 @@ class NetworkPublisher(Node):
         self.mode = self.get_parameter('mode').get_parameter_value().string_value 
         self.host = self.get_parameter('server').get_parameter_value().string_value
         self.port = self.get_parameter('port').get_parameter_value().integer_value
-        self.topic_priorities = self.get_parameter('topicPriorities').get_parameter_value().integer_array_value
+        topic_priority_list = self.get_parameter('topicPriorities').get_parameter_value().integer_array_value
 
         # if tcp, this value should be less than or equal to the number of clients the net_subscriber can handle
         # currently hardcoded at 20
-        self.worker_count = 20
+        self.worker_count = self.get_parameter('numWorkers').get_parameter_value().integer_value
+
+        self.get_logger().info(f"Starting with {self.worker_count} workers.")
 
         for idx, tType in enumerate(topicTypes):
             module_parts = tType.split('.')
             module_name = module_parts[0] + '.' + module_parts[1]
             module = import_module(module_name)
             msg = getattr(module, module_parts[2])
+            self.topic_priorities[topics[idx]] = topic_priority_list[idx]
 
             func = partial(self.listener_callback, topics[idx])
 
@@ -96,9 +111,10 @@ class NetworkPublisher(Node):
         self.declare_parameter('topicTypes')
         self.declare_parameter('topicPriorities')
         self.declare_parameter('mode')
-
+        self.declare_parameter('numWorkers')
+        
     def init_socket_with_rety(self, worker_id):
-        """ attempts to initialize the socket with retries. Acquires connection lock so only one thread  """
+        """ attempts to initialize the socket with retries for the worker_id. retries is only attempted for tcp connections """
 
         if self.mode == "tcp":
             connected = False
@@ -119,7 +135,8 @@ class NetworkPublisher(Node):
         
     def _init_socket_tcp(self, worker_id):
         """
-        initializes a tcp socket. If the socket was already initialized then it attempts to close the socket before assigning it as our active socket
+        initializes a tcp socket. If the socket was already initialized then it attempts to close the socket before assigning it to our
+        active sockets
         """
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -154,15 +171,17 @@ class NetworkPublisher(Node):
                 try:
                     priorityItem = self.message_queue.get(True, 3)
                     self.send_message(priorityItem.item, worker_id)
-                    messageSent = True
+                    if self.message_count % 100 == 0:
+                        self.get_logger().info(f"Approximate queue size: {self.message_queue.qsize()}")
                 except (ConnectionResetError, BrokenPipeError, ConnectionResetError) as e:
                     self.get_logger().error(f"Error sending socket message: {str(e)}")
                     self.init_socket_with_rety(worker_id)
                 except queue.Empty:
+                    priorityItem = None
                     pass
                 finally:
                     # give one more attempt at sending the message if we failed
-                    if not messageSent:
+                    if not messageSent and priorityItem is not None:
                         try:
                             self.send_message(priorityItem.item, worker_id)
                         except:
@@ -185,10 +204,11 @@ class NetworkPublisher(Node):
 
         try:
             self.message_queue.put_nowait(item)
+            self.message_count += 1
         except queue.Full as ex:
             ## TODO handle queue full issue - shouldn't hit this too often
             self.get_logger().error(f'Error queuing message {str(ex)}')
-        except:
+        except Exception as ex:
             # some other error
             self.get_logger().error(f'Error queuing message {str(ex)}')
 
@@ -224,7 +244,9 @@ def main(args=None):
         network_publisher.shutdown()
         network_publisher.destroy_node()
         rclpy.shutdown()
-    except:
+    except Exception as ex:
+        traceback.print_exc()
+
         print("!! SIGINT received - attempting to clean up remaining threads...please wait...")
         network_publisher.shutdown()
         network_publisher.destroy_node()

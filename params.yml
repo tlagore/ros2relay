@@ -11,55 +11,31 @@
 ros2relay_net_publisher:
     ros__parameters:
         topics: [
-            'camera/depth/camera_info',
-            'camera/depth/color/points',
-            'camera/depth/image_rect_raw',
-            'tf_static']
+            'topic',
+            'topic_num']
         topicTypes: [
-            'sensor_msgs.msg.CameraInfo',
-            'sensor_msgs.msg.PointCloud2',
-            'sensor_msgs.msg.Image',
-            'tf2_msgs.msg.TFMessage'
+            'std_msgs.msg.String',
+            'std_msgs.msg.Int64'
         ]
+        # priorities for each topic type - lower number = higher priority
         topicPriorities: [
-            1,
-            0,
             0,
             1
         ]
         port: 12499
         mode: "udp"
-        server: "192.168.0.51"
+        server: "192.168.0.100"
+        numWorkers: 20
 ros2relay_net_subscriber:
     ros__parameters:
         topics: [
-            'camera/aligned_depth_to_color/camera_info',
-            'camera/aligned_depth_to_color/image_raw',
-            'camera/color/camera_info',
-            'camera/color/image_raw',
-            'camera/depth/camera_info',
-            'camera/depth/color/points',
-            'camera/depth/image_rect_raw',
-            'camera/infra1/camera_info',
-            'camera/infra1/image_rect_raw',
-            'camera/infra2/camera_info',
-            'camera/infra2/image_rect_raw',
-            'parameter_events',
-            'tf_static']
+            'topic',
+            'topic_num']
         topicTypes: [
-            'sensor_msgs.msg.CameraInfo',
-            'sensor_msgs.msg.Image',
-            'sensor_msgs.msg.CameraInfo',
-            'sensor_msgs.msg.Image',
-            'sensor_msgs.msg.CameraInfo',
-            'sensor_msgs.msg.PointCloud2',
-            'sensor_msgs.msg.Image',
-            'sensor_msgs.msg.CameraInfo',
-            'sensor_msgs.msg.Image',
-            'sensor_msgs.msg.CameraInfo',
-            'sensor_msgs.msg.Image',
-            'rcl_interfaces.msg.ParameterEvent',
-            'tf2_msgs.msg.TFMessage']
-        mode: "udp"
+            'std_msgs.msg.String',
+            'std_msgs.msg.Int64'
+        ]
+        mode: 'udp'
         port: 12499
-        num_listeners: 5
+        # only applies to UDP
+        num_listeners: 20

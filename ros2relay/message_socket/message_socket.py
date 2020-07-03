@@ -66,7 +66,6 @@ class MessageSocket:
         return data
 
     def sendto(self, message):
-        print(f"attempting to send message to {self._host}")
         messageBytes = pickle.dumps(message)
         self._socket.sendto(messageBytes, self._host)
 
