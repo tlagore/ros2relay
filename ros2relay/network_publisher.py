@@ -88,8 +88,6 @@ class NetworkPublisher(Node):
         # currently hardcoded at 20
         self.worker_count = self.get_parameter('numWorkers').get_parameter_value().integer_value
 
-        self.get_logger().info(f"Starting with {self.worker_count} workers.")
-
         for idx, tType in enumerate(topicTypes):
             module_parts = tType.split('.')
             module_name = module_parts[0] + '.' + module_parts[1]
@@ -120,6 +118,8 @@ class NetworkPublisher(Node):
         for i in range(0, self.worker_count):
             self.workers.append(threading.Thread(target=self.work, args=((i,))))
             self.workers[i].start()
+
+        self.get_logger().info(f"{self.worker_count} workers started. Sending to {self.host}:{self.port} mode = {self.mode}")
 
         self.metric_handler = MessageMetricsHandler(self.worker_count)
 
@@ -187,7 +187,6 @@ class NetworkPublisher(Node):
         """
         work thread, retrieve items from the priority queue and send the message
         """
-        self.get_logger().info(f"Worker {worker_id} starting work")
 
         try:
             while self.running:

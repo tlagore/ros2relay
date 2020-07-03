@@ -97,7 +97,9 @@ class NetworkSubscriber(Node):
 
         self.metric_handler = MessageMetricsHandler(self.num_listeners)
 
-        self.init_socket()
+        self.init_sockets()
+
+        self.get_logger().info(f"{self.num_listeners} workers started. Listening on port {self.port} mode = {self.mode}")
 
         timer_period = 1  # seconds
         self.metric_publisher = self.create_timer(timer_period, self.metric_handler.publish_metrics)
@@ -109,7 +111,7 @@ class NetworkSubscriber(Node):
         self.declare_parameter('mode')
         self.declare_parameter('num_listeners')
 
-    def init_socket(self):
+    def init_sockets(self):
         self.get_logger().info(f'Intializing listener socket on port "{self.port}" - mode: {self.mode}')
 
         if self.mode == "tcp":
@@ -136,15 +138,6 @@ class NetworkSubscriber(Node):
                 self._running = True
                 self.listener_threads.append(threading.Thread(target=self.listen, args=((i,))))
                 self.listener_threads[i].start()
-            
-            # sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            # sock.bind(("0.0.0.0", self.port))
-            # self._socket = MessageSocket(sock)
-
-            # for i in range(0, self.num_listeners):
-            #     self._running = True
-            #     self.listener_threads.append(threading.Thread(target=self.listen, args=((i,))))
-            #     self.listener_threads[i].start()
         else:
             raise Exception("Mode parameter must be one of 'udp' or 'tcp'")
 
@@ -176,8 +169,6 @@ class NetworkSubscriber(Node):
 
         try:
             if self.mode == "tcp":
-                self.get_logger().info(f'Worker {worker_id} listening for clients. Mode={s}')
-
                 while self._running:
                     self._socket.listen(self.num_listeners)
                     (client, addr) = self._socket.accept()
@@ -185,8 +176,6 @@ class NetworkSubscriber(Node):
                     clientThread = threading.Thread(target=self.handle_client, args=((client, addr),))
                     clientThread.start()
             else:
-                self.get_logger().info(f'Worker {worker_id} listening for messages. Mode={self.mode}')
-
                 while self._running:
                     (msg, msgSize) = self.sockets[worker_id].recvfrom(65535)
                     if msg is not None:
