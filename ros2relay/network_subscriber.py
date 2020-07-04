@@ -95,7 +95,10 @@ class NetworkSubscriber(Node):
                 10
             )
 
-        self.metric_handler = MessageMetricsHandler(self.num_listeners)
+        if self.mode == 'udp':
+            self.metric_handler = MessageMetricsHandler(self.num_listeners)
+        elif self.mode == 'tcp':
+            self.metric_handler = MessageMetricsHandler(1)
 
         self.init_sockets()
 
@@ -150,10 +153,11 @@ class NetworkSubscriber(Node):
         (client, addr) = args
         client_sock = MessageSocket(client)
         try:
-            msg = client_sock.recv_message()
+            (msg, msgSize) = client_sock.recv_message()
             while(msg.type != MessageType.DISCONNECT and self._running):
+                self.metric_handler.handle_message(0, msgSize)
                 self.handle_message(msg)
-                msg = client_sock.recv_message()
+                (msg, msgSize) = client_sock.recv_message()
 
             if not self._running:
                 client_sock.close()

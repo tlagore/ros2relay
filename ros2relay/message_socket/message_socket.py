@@ -41,7 +41,7 @@ class MessageSocket:
         messageBytes = self.recvall(messageSize)
         
         message = pickle.loads(messageBytes)
-        return message
+        return (message, len(messageBytes))
 
     def send_raw(self, data):
         """ """
