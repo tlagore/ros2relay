@@ -143,7 +143,7 @@ class NetworkSubscriber(Node):
 
     def handle_message(self, msg):
         """ handles a message received by a client """
-        # self.my_publishers[msg.topic].publish(msg.payload)
+        self.my_publishers[msg.topic].publish(msg.payload)
 
     def handle_client(self, args):
         """  """
