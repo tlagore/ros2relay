@@ -18,7 +18,7 @@ ros2relay_net_publisher:
             1
         ]
         # can be a integer or integer array (per topic)
-        sampleRates: 1000
+        sampleRates: 100
         port: 12499
         mode: 'tcp'
         server: "localhost"

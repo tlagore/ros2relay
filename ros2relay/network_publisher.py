@@ -43,6 +43,7 @@ class PrioritizedItem:
             return NotImplemented
         return self.priority < other.priority
 
+
 class NetworkPublisher(Node):
     """ ros2relay NetworkPublisher subscribes to a set of topics on the local system and publishes them to the network
     
@@ -51,8 +52,13 @@ class NetworkPublisher(Node):
 
     # priority of the topic, where a lower value indicates a higher priority
     topic_priorities = {}
-
     topic_sample_rates = {}
+    # how many packets we've observed on a topic. The format is
+    # [{topic:numSampled}]
+    # where each index is a worker id
+    worker_sample_counts = []
+
+    sampling = True
 
     # keep reference to subscriptions
     my_subscriptions = {}
@@ -82,9 +88,11 @@ class NetworkPublisher(Node):
             module = import_module(module_name)
             msg = getattr(module, module_parts[2])
             self.topic_priorities[self.topics[idx]] = self.topic_priority_list[idx]
-            self.topic_sample_rates[self.topics[idx]] = self.sample_rates[idx]
 
             func = partial(self.listener_callback, self.topics[idx])
+
+            if self.sampling:
+                self.topic_sample_rates[self.topics[idx]] = self.sample_rates[idx]
 
             self.my_subscriptions[self.topics[idx]] = self.create_subscription(
                 msg,
@@ -98,6 +106,10 @@ class NetworkPublisher(Node):
         self.running = True
 
         for i in range(0, self.worker_count):
+            if self.sampling:
+                self.worker_sample_counts.append({})
+                for topic in self.topics:
+                    self.worker_sample_counts[i][topic] = self.topic_sample_rates[topic]
             self.socket_locks.append(TimeoutLock())
             self.init_socket_with_rety(i)
 
@@ -156,7 +168,7 @@ class NetworkPublisher(Node):
 
         if self.sample_rates is None:
             self.get_logger().info('sample rates was not set, sending all topics data')
-            self.sample_rates = [1 for topic in self.topics]
+            self.sampling = False
 
         # if tcp, this value should be less than or equal to the number of clients the net_subscriber can handle
         self.worker_count = self.get_parameter('numWorkers').get_parameter_value().integer_value
@@ -230,7 +242,15 @@ class NetworkPublisher(Node):
                 try:
                     # throws queue.Empty exception if it fails to get an item in 3 seconds
                     priorityItem = self.message_queue.get(True, 3)
-                    self.send_message(priorityItem.item, worker_id)
+                    topic = priorityItem.item.topic
+                    self.metric_handler.increment_observed()
+                    if self.sampling and self.worker_sample_counts[worker_id][topic] == self.topic_sample_rates[topic]:
+                        self.send_message(priorityItem.item, worker_id)
+                        self.worker_sample_counts[worker_id][topic] = 0
+                    else:
+                        self.worker_sample_counts[worker_id][topic] += 1
+                        
+                    # might not have actually been sent if we are sampling, but dont attempt to send it in finally
                     messageSent = True
 
                 except (ConnectionResetError, BrokenPipeError, ConnectionResetError) as e:
@@ -249,6 +269,7 @@ class NetworkPublisher(Node):
                             pass
         except Exception as ex:
             self.get_logger().error(f"Worker thread {worker_id} exitting unexpectedly with error: {str(ex)}")
+            self.get_logger().error(traceback.format_exc())
         finally:
             self.get_logger().info(f"Worker thread {worker_id} finishing.")
 

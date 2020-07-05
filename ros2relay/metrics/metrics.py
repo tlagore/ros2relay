@@ -31,6 +31,10 @@ class MessageMetricsHandler:
         self.dropped_messages = 0
         self.dropped_per_period = 0
         self.dropped_lock = threading.Lock()
+
+        self.observed_messages = 0
+        self.observed_lock = threading.Lock()
+
         self.metric_handlers = []
         self.count_drops = count_drops
 
@@ -54,17 +58,20 @@ class MessageMetricsHandler:
         handle_time = 0 if sums[0] == 0 else sums[2]/sums[0]
 
         if self.count_drops:
-            message = f"m/s:{sums[0]}. d:{self.dropped_messages} d/s:{self.dropped_per_period} KB/s:{(sums[1] / 1024):.2f}. t/s:{handle_time:.2f}"
+            message = f"m/s observed: {self.observed_messages}. m/s:{sums[0]}. d:{self.dropped_messages} d/s:{self.dropped_per_period} KB/s:{(sums[1] / 1024):.2f}. t/s:{handle_time:.2f}"
             print(message.ljust(len(message)+20), end='')
             print("\r", end='')
 
             with self.dropped_lock:
                 self.dropped_per_period = 0
         else:
-            message = f"m/s:{sums[0]}. KB/s:{(sums[1] / 1024):.2f}. t/s:{handle_time:.2f}"
+            message = f"m/s observed: {self.observed_messages}. m/s sent:{sums[0]}. KB/s:{(sums[1] / 1024):.2f}. t/s:{handle_time:.2f}"
             print(message.ljust(len(message)+20), end='')
             print("\r", end='')
 
+        # only lock once per publish period to ensure we reset observed
+        with self.observed_lock:
+            self.observed_messages = 0
     
     def increment_dropped(self):
         # shouldn't be calling this if we haven't enabled drop counters
@@ -72,3 +79,7 @@ class MessageMetricsHandler:
             with self.dropped_lock:
                 self.dropped_messages += 1
                 self.dropped_per_period += 1
+
+    def increment_observed(self):
+        # to not put a lock in hot path, observed messages is not thread safe on increment
+        self.observed_messages += 1
