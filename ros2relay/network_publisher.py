@@ -283,7 +283,7 @@ class NetworkPublisher(Node):
             a single retry on the message, otherwise it will be lost and all subsequent
             messsages until the connection is re-established
         """
-        print(f"got callback on {topic})
+        print(f"got callback on {topic}")
         netMessage = SocketMessage(mType=MessageType.MESSAGE, mTopic=topic, mPayload=msg)
         item = PrioritizedItem(priority=self.topic_priorities[topic], item=netMessage)
 

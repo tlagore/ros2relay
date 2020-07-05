@@ -99,7 +99,7 @@ class NetworkSubscriber(Node):
 
     def handle_message(self, msg):
         """ handles a message received by a client """
-        print(f"trying to publish on topic {msg.topic} with payload {str(msg.payload)}")
+        print(f"trying to publish on topic {msg.topic}")
         self.my_publishers[msg.topic].publish(msg.payload)
 
     def handle_client(self, args):
@@ -110,7 +110,6 @@ class NetworkSubscriber(Node):
             msg, msg_size, time_taken = client_sock.recv_message()
             while(msg.type != MessageType.DISCONNECT and self._running):
                 self.metric_handler.handle_message(0, msg_size, time_taken)
-                print("Trying to publish on topic {msg}")
                 self.handle_message(msg)
                 msg, msg_size, time_taken = client_sock.recv_message()
 
