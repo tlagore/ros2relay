@@ -65,7 +65,7 @@ class MessageMetricsHandler:
             with self.dropped_lock:
                 self.dropped_per_period = 0
         else:
-            message = f"m/s observed: {self.observed_messages}. m/s sent:{sums[0]}. KB/s:{(sums[1] / 1024):.2f}. t/s:{handle_time:.2f}"
+            message = f"m/s observed: {self.observed_messages}. m/s sent:{sums[0]}. KB/s:{(sums[1] / 1024):.2f}. t/m/s:{handle_time:.2f}"
             print(message.ljust(len(message)+20), end='')
             print("\r", end='')
 

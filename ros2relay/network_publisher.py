@@ -195,7 +195,7 @@ class NetworkPublisher(Node):
                         connected = True
                         self.get_logger().info('Connection successful!')
                     except Exception as e:
-                        self.get_logger().error(f"Error initializing socket exception: {str(e)} worker id {workerId}")
+                        self.get_logger().error(f"Error initializing socket exception: {str(e)} worker id {worker_id}")
                         for i in range(1, 5):
                             self.get_logger().info(f'Retrying in {5-i}')
                             time.sleep(1)
@@ -283,6 +283,7 @@ class NetworkPublisher(Node):
             a single retry on the message, otherwise it will be lost and all subsequent
             messsages until the connection is re-established
         """
+        print(f"got callback on {topic})
         netMessage = SocketMessage(mType=MessageType.MESSAGE, mTopic=topic, mPayload=msg)
         item = PrioritizedItem(priority=self.topic_priorities[topic], item=netMessage)
 
