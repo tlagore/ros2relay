@@ -101,7 +101,7 @@ class NetworkPublisher(Node):
                 10
             )
 
-            self.get_logger().info(f'Initializing topic "{self.topics[idx]}" : {tType} - sample rate : {if self.sampling self.sample_rates[idx] else 'Disabled'}')
+            self.get_logger().info(f'Initializing topic "{self.topics[idx]}" : {tType} - sample rate : {self.sample_rates[idx] if self.sampling else 'Disabled'}')
 
         self.running = True
 
