@@ -243,7 +243,7 @@ class NetworkPublisher(Node):
                     priorityItem = self.message_queue.get(True, 3)
                     topic = priorityItem.item.topic
                     self.metric_handler.increment_observed()
-                    print(f"sending message on topic {topic}")
+                    print(f"sending message on topic {topic} approximate queue size: {self.message_queue.qsize()}")
 
                     if self.sampling == True:
                         if self.worker_sample_counts[worker_id][topic] == self.topic_sample_rates[topic]:
