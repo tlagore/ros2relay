@@ -26,6 +26,7 @@ ros2relay_net_publisher:
             1
         ]
         port: 12499
+        sampleRates: [0, 500, 500, 0]
         mode: 'tcp'
         server: "192.168.0.100"
         numWorkers: 40
