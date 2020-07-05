@@ -7,7 +7,8 @@ setup(
     version='0.0.0',
     packages=[
         package_name,
-        'ros2relay.message_socket'
+        'ros2relay.message_socket',
+        'ros2relay.metrics'
     ],
     data_files=[
         ('share/ament_index/resource_index/packages',

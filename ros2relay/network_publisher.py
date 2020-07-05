@@ -12,7 +12,7 @@ import traceback
 import time
 
 from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
-from ros2relay.message_socket.message_metrics import MessageMetricsHandler
+from ros2relay.metrics.metrics import MessageMetricsHandler
 
 # class obtained from combination of https://stackoverflow.com/a/16782490/4089216 and https://stackoverflow.com/a/16782391/4089216
 class TimeoutLock(object):
@@ -52,6 +52,8 @@ class NetworkPublisher(Node):
     # priority of the topic, where a lower value indicates a higher priority
     topic_priorities = {}
 
+    topic_sample_rates = {}
+
     # keep reference to subscriptions
     my_subscriptions = {}
 
@@ -67,50 +69,36 @@ class NetworkPublisher(Node):
     # need to do some testing with 1000 as max value for priority queue
     message_queue = queue.PriorityQueue(1000)
 
-    # message count per thread
-    message_counts = []
-    # sent_count = 0
-
 
     def __init__(self):
         super().__init__('ros2relay_net_publisher')
 
         self._declare_parameters()
-        
-        topics = self.get_parameter('topics').get_parameter_value().string_array_value
-        topicTypes = self.get_parameter('topicTypes').get_parameter_value().string_array_value
-        self.mode = self.get_parameter('mode').get_parameter_value().string_value 
-        self.host = self.get_parameter('server').get_parameter_value().string_value
-        self.port = self.get_parameter('port').get_parameter_value().integer_value
-        topic_priority_list = self.get_parameter('topicPriorities').get_parameter_value().integer_array_value
+        self._set_local_params()
 
-        # if tcp, this value should be less than or equal to the number of clients the net_subscriber can handle
-        # currently hardcoded at 20
-        self.worker_count = self.get_parameter('numWorkers').get_parameter_value().integer_value
-
-        for idx, tType in enumerate(topicTypes):
+        for idx, tType in enumerate(self.topic_types):
             module_parts = tType.split('.')
             module_name = module_parts[0] + '.' + module_parts[1]
             module = import_module(module_name)
             msg = getattr(module, module_parts[2])
-            self.topic_priorities[topics[idx]] = topic_priority_list[idx]
+            self.topic_priorities[self.topics[idx]] = self.topic_priority_list[idx]
+            self.topic_sample_rates[self.topics[idx]] = self.sample_rates[idx]
 
-            func = partial(self.listener_callback, topics[idx])
+            func = partial(self.listener_callback, self.topics[idx])
 
-            self.my_subscriptions[topics[idx]] = self.create_subscription(
+            self.my_subscriptions[self.topics[idx]] = self.create_subscription(
                 msg,
-                topics[idx],
+                self.topics[idx],
                 func,
                 10
             )
 
-            self.get_logger().info(f'Initializing topic {topics[idx]} with type {tType}')
+            self.get_logger().info(f'Initializing topic "{self.topics[idx]}" : {tType} - sample rate : {self.sample_rates[idx]}')
 
         self.running = True
 
         for i in range(0, self.worker_count):
             self.socket_locks.append(TimeoutLock())
-            self.message_counts.append(0)
             self.init_socket_with_rety(i)
 
         # as worker threads can access the socket list, initialize workers in separate loop after initial sockets
@@ -121,11 +109,57 @@ class NetworkPublisher(Node):
 
         self.get_logger().info(f"{self.worker_count} workers started. Sending to {self.host}:{self.port} mode = {self.mode}")
 
-        self.metric_handler = MessageMetricsHandler(self.worker_count)
+        self.metric_handler = MessageMetricsHandler(num_handlers=self.worker_count, count_drops=True)
 
         timer_period = 1  # seconds
         self.metric_publisher = self.create_timer(timer_period, self.metric_handler.publish_metrics)
 
+    def _set_local_params(self):
+        self.topics = self.get_parameter('topics').get_parameter_value().string_array_value
+        self.topic_types = self.get_parameter('topicTypes').get_parameter_value().string_array_value
+        self.mode = self.get_parameter('mode').get_parameter_value().string_value 
+        self.host = self.get_parameter('server').get_parameter_value().string_value
+        self.port = self.get_parameter('port').get_parameter_value().integer_value
+        self.topic_priority_list = self.get_parameter('topicPriorities').get_parameter_value().integer_array_value
+        sampleRateParam = self.get_parameter('sampleRates').get_parameter_value()
+        self.sample_rates = None
+
+        required_params = [
+            ('topics', self.topics),
+            ('topicTypes', self.topic_types),
+            ('mode', self.mode),
+            ('host', self.host),
+            ('port', self.port)]
+
+        for (paramName, param) in required_params:
+            if ((isinstance(param, list) or isinstance(param, str)) and len(param) == 0) or param == 0:
+                raise ValueError(f"{paramName} is a required parameter and was not set")
+
+        if not self.topic_priority_list:
+            self.topic_priority_list = [0 for topic in self.topics]
+            
+        if len(self.topics) != len(self.topic_types):
+            raise ValueError("topic and topicTypes parameters should be equal in size." +
+                                f"topic size: {len(self.topics)}, topicTypes size: {len(self.topic_types)}")
+
+        if len(sampleRateParam.integer_array_value) != 0:
+            if len(sampleRateParam.integer_array_value) != len(self.topics):
+                raise ValueError('if sampleRates parameter is set as array, length of array must be equal to number of topics')
+
+            self.sample_rates = sampleRateParam.integer_array_value
+
+        print(self.sample_rates)
+
+        if self.sample_rates is None and sampleRateParam.integer_value != 0:
+            # same sample rate for each topic
+            self.sample_rates = [sampleRateParam.integer_value for topic in self.topics]
+
+        if self.sample_rates is None:
+            self.get_logger().info('sample rates was not set, sending all topics data')
+            self.sample_rates = [1 for topic in self.topics]
+
+        # if tcp, this value should be less than or equal to the number of clients the net_subscriber can handle
+        self.worker_count = self.get_parameter('numWorkers').get_parameter_value().integer_value
 
     def _declare_parameters(self):
         self.declare_parameter('server')
@@ -133,8 +167,9 @@ class NetworkPublisher(Node):
         self.declare_parameter('topics')
         self.declare_parameter('topicTypes')
         self.declare_parameter('topicPriorities')
-        self.declare_parameter('mode')
+        self.declare_parameter('mode', 'tcp')
         self.declare_parameter('numWorkers')
+        self.declare_parameter('sampleRates')
         
     def init_socket_with_rety(self, worker_id):
         """ attempts to initialize the socket with retries for the worker_id. retries is only attempted for tcp connections """
@@ -195,7 +230,6 @@ class NetworkPublisher(Node):
                 try:
                     # throws queue.Empty exception if it fails to get an item in 3 seconds
                     priorityItem = self.message_queue.get(True, 3)
-                    self.message_counts[worker_id] += 1
                     self.send_message(priorityItem.item, worker_id)
                     messageSent = True
 
@@ -234,20 +268,24 @@ class NetworkPublisher(Node):
         except queue.Full as ex:
             ## TODO handle queue full issue - shouldn't hit this too often, we either need more workers or too much data is being sent
             # self.get_logger().error(f'Queue is full! {str(ex)}')
-            print(f"queue full: {str(ex)}")
-            # self.dropped_messages += 1
+            self.metric_handler.increment_dropped()
         except Exception as ex:
             # some other error
             self.get_logger().error(f'Error queuing message {str(ex)}')
 
     def send_message(self, message, worker_id):
-        if self.mode == "tcp":
-            bytesSent = self.sockets[worker_id].send_message(message)
-        elif self.mode == "udp":
-            bytesSent = self.sockets[worker_id].sendto(message)
+        if self.mode != 'tcp' and self.mode != 'udp':
+            raise Exception(f'Mode is set to {self.mode}. Accepted modes are "udp" or "tcp"')
+
+        if self.mode == 'tcp':
+            bytesSent, time_taken = self.sockets[worker_id].send_message(message)
+        elif self.mode == 'udp':
+            bytesSent, time_taken = self.sockets[worker_id].sendto(message)
 
         if bytesSent and bytesSent > 0:
-            self.metric_handler.handle_message(worker_id, bytesSent)
+            self.metric_handler.handle_message(worker_id, bytesSent, time_taken)
+            # time_taken in seconds floating point
+
 
     def shutdown(self):
         self.running = False

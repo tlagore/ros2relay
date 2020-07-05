@@ -21,7 +21,13 @@ class MessageSocket:
         self._host = host
         
     def send_message(self, message):
-        """ sends a message to be received by another MessageSocket """
+        """
+        sends a message to be received by another MessageSocket
+        
+        returns: messageSize (in bytes), time_taken to handle the message
+        """
+
+        start = time.time()
         messageBytes = pickle.dumps(message)
 
         messageLen = len(messageBytes)
@@ -30,18 +36,26 @@ class MessageSocket:
         self._socket.sendall(header)
         self._socket.sendall(messageBytes)
 
-        return len(messageBytes)
+        return len(messageBytes), time.time() - start
 
     def recv_message(self):
-        """ Receives a message and returns it unpickled """
+        """ 
+        Receives a message and returns it unpickled
+        
+        returns: message, messageSize (in bytes), time_taken to handle the message
+        """
         
         header = self.recvall(16) 
 
         messageSize = self.get_msg_size(header)
+    
+        # got a message header, begin message receive
+        start = time.time()
+
         messageBytes = self.recvall(messageSize)
         
         message = pickle.loads(messageBytes)
-        return (message, len(messageBytes))
+        return (message, len(messageBytes), time.time() - start)
 
     def send_raw(self, data):
         """ """
@@ -68,19 +82,32 @@ class MessageSocket:
         return data
 
     def sendto(self, message):
+        """
+        send a message over udp to the configured host/port
+        
+        returns: messageSize (in bytes), time_taken (to send the message in seconds)
+        """
+        start = time.time()
         messageBytes = pickle.dumps(message)
         self._socket.sendto(messageBytes, self._host)
-        return len(messageBytes)
+        return len(messageBytes), time.time() - start
 
     def recvfrom(self, numBytes):
+        """
+        receives a message in bytes over udp
+
+        returns: message, messageSize (in bytes), time_taken (to handle the message in seconds)
+        Note: time_taken here is semi-unreliable, because we can only start the clock after we receive the message
+        as recvfrom is blocking. So time_taken here only includes time taken to deserialize the object
+        """
         (data, address) = self._socket.recvfrom(numBytes)
         try:
+            start = time.time()
             messageSize = len(data)
             message = pickle.loads(data)
-            return (message, messageSize)
+            return message, messageSize, time.time() - start
         except:
-            return (None, None)
-        #return self._socket.recvfrom(numBytes)
+            return (None, None, None)
 
     def close(self):
         try:

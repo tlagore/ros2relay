@@ -5,56 +5,9 @@ import threading
 import traceback
 
 from ros2relay.message_socket.message_socket import MessageSocket, SocketMessage, MessageType
-from ros2relay.message_socket.message_metrics import MessageMetricsHandler
+from ros2relay.metrics.metrics import MessageMetricsHandler
 
 from rclpy.node import Node
-
-class MessageMetrics:
-    def __init__(self):
-        """ """
-        self.byte_sum = 0
-        self.message_count = 0
-
-    def increment_message_count(self, message_size):
-        self.message_count += 1
-        self.byte_sum += message_size
-
-    def get_and_reset_metrics(self):
-        m_count = self.message_count
-        b_sum = self.byte_sum
-
-        self.message_count = 0
-        self.byte_sum = 0
-
-        return (m_count, b_sum)
-
-
-class MessageMetricsHandler:
-    metric_handlers = []
-    
-    def __init__(self, num_handlers):
-        """ """
-        for i in range(num_handlers):
-            self.metric_handlers.append(MessageMetrics())
-
-    def handle_message(self, handler, message_size):
-        if handler > len(self.metric_handlers) - 1 or handler < 0:
-            raise ValueError(f"Handler must be between 0 and {len(self.metric_handlers) - 1}")
-
-        self.metric_handlers[handler].increment_message_count(message_size)
-
-    def publish_metrics(self):
-        """ """
-        # list of tuples (message_count, byte_sum) for each worker
-        vals = [m.get_and_reset_metrics() for m in self.metric_handlers]
-
-        # summed tuple, [sum(message_count), sum(byte_sum)]
-        sums = [sum(x) for x in zip(*vals)]
-
-        message = f"Messages processed/second: {sums[0]}. KBytes processed/second: {(sums[1] / 1024):.2f}"
-        print(message.ljust(len(message)+20), end='')
-        print("\r", end='')
-
 
 class NetworkSubscriber(Node):
     """ 
@@ -146,18 +99,18 @@ class NetworkSubscriber(Node):
 
     def handle_message(self, msg):
         """ handles a message received by a client """
-        self.my_publishers[msg.topic].publish(msg.payload)
+        #self.my_publishers[msg.topic].publish(msg.payload)
 
     def handle_client(self, args):
         """  """
         (client, addr) = args
         client_sock = MessageSocket(client)
         try:
-            (msg, msgSize) = client_sock.recv_message()
+            msg, msg_size, time_taken = client_sock.recv_message()
             while(msg.type != MessageType.DISCONNECT and self._running):
-                self.metric_handler.handle_message(0, msgSize)
+                self.metric_handler.handle_message(0, msg_size, time_taken)
                 self.handle_message(msg)
-                (msg, msgSize) = client_sock.recv_message()
+                msg, msg_size, time_taken = client_sock.recv_message()
 
             if not self._running:
                 client_sock.close()
@@ -181,9 +134,9 @@ class NetworkSubscriber(Node):
                     clientThread.start()
             else:
                 while self._running:
-                    (msg, msgSize) = self.sockets[worker_id].recvfrom(65535)
+                    msg, msgSize, time_taken = self.sockets[worker_id].recvfrom(65535)
                     if msg is not None:
-                        self.metric_handler.handle_message(worker_id, msgSize)
+                        self.metric_handler.handle_message(worker_id, msgSize, time_taken)
                         self.handle_message(msg)
         except:
             if self._running:
