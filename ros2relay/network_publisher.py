@@ -101,7 +101,7 @@ class NetworkPublisher(Node):
                 10
             )
 
-            self.get_logger().info(f'Initializing topic "{self.topics[idx]}" : {tType} - sample rate : {self.sample_rates[idx]}')
+            self.get_logger().info(f'Initializing topic "{self.topics[idx]}" : {tType} - sample rate : {if self.sampling self.sample_rates[idx] else 'Disabled'}')
 
         self.running = True
 
@@ -159,8 +159,6 @@ class NetworkPublisher(Node):
                 raise ValueError('if sampleRates parameter is set as array, length of array must be equal to number of topics')
 
             self.sample_rates = sampleRateParam.integer_array_value
-
-        print(self.sample_rates)
 
         if self.sample_rates is None and sampleRateParam.integer_value != 0:
             # same sample rate for each topic
