@@ -1,0 +1,34 @@
+# topics, topicTypes, port, and mode shoud be mirrors of one another
+# topics: the names of the topics that the ros2relay will relay across network
+# topicTypes: the full msg path of the topic 
+#       NOTE: There is currently no support for custom types, only built in types
+# port: port to communicate on
+# server: remote server to connect to. 127.0.0.1 is localhost for local testing.
+# num_listeners: number of threads spawned to handle incoming messages.
+#       NOTE: depends on the number of topics being subscribed to, if you have
+#           too few listeners, you may miss messages. However if you have too many you 
+#           will tie up threads on your system.
+ros2relay_net_publisher:
+    ros__parameters:
+        topics: ['topic', 'topicNum']
+        topicTypes: [ 'std_msgs.msg.String', 'std_msgs.msg.Int64' ]
+        # priorities for each topic type - lower number = higher priority
+        topicPriorities: [
+            0,
+            1
+        ]
+        # can be a integer or integer array (per topic)
+        sampleRates: 100
+        port: 12499
+        mode: 'tcp'
+        server: "localhost"
+        numWorkers: 40
+        # send 1 in 1000 packets
+ros2relay_net_subscriber:
+    ros__parameters:
+        topics: ['topic', 'topicNum']
+        topicTypes: [ 'std_msgs.msg.String', 'std_msgs.msg.Int64' ]
+        mode: 'tcp'
+        port: 12499
+        # only applies to UDP
+        num_listeners: 40
